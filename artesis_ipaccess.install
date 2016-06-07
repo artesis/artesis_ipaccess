@@ -1,0 +1,94 @@
+<?php
+/**
+ * @file
+ * Artesis IP Access Management install file.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function artesis_ipaccess_schema() {
+  $schema['ip_access'] = array(
+    'fields' => array(
+      'ipid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not_null' => TRUE,
+      ),
+      'ip' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'status' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+    ),
+    'primary key' => array('ipid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function artesis_ipaccess_install() {
+  $content_types = node_type_get_names();
+
+  $field_name = 'field_private_content';
+
+  $field = array(
+    'field_name' => $field_name,
+    'type' => 'list_boolean',
+    // It's mandatory to add at least two empty values here,
+    // Drupal will do the rest then:
+    'settings' => array(
+      'allowed_values' => array(
+        '',
+        '',
+      ),
+    ),
+  );
+  field_create_field($field);
+
+  foreach ($content_types as $ct => $ct_object) {
+    $instance = array(
+      'field_name' => $field_name,
+      'entity_type' => 'node',
+      'bundle' => $ct,
+      'label' => 'Private content',
+      'description' => 'Check if this node will be available for private only.',
+      'widget' => array(
+        'type' => 'options_onoff',
+        'settings' => array(
+          'display_label' => TRUE,
+        ),
+      ),
+    );
+    field_create_instance($instance);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function artesis_ipaccess_uninstall() {
+  $content_types = node_type_get_names();
+
+  $field_name = 'field_private_content';
+
+  foreach ($content_types as $ct => $ct_object) {
+    $instance = array(
+      'field_name' => $field_name,
+      'bundle' => $ct,
+      'entity_type' => 'node',
+    );
+    field_delete_instance($instance);
+  }
+
+  field_delete_field($field_name);
+}

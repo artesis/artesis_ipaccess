@@ -1,0 +1,177 @@
+<?php
+/**
+ * @file
+ * artesis_ipaccess.module
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function artesis_ipaccess_menu() {
+  $items = array();
+
+  $items['admin/config/people/ip'] = array(
+    'title' => 'IP Access Management',
+    'description' => 'Manage allowed/disallowed IP\'s',
+    'page callback' => 'artesis_ipaccess_admin_page',
+    'access arguments' => array('administer ip'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/config/people/ip/delete/%'] = array(
+    'title' => 'Delete IP address',
+    'page callback' => 'artesis_ipaccess_ip_delete',
+    'page arguments' => array(5),
+    'access arguments' => array('administer ip'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function artesis_ipaccess_permission() {
+  return array(
+    'administer ip' => array(
+      'title' => t('IP Access Management'),
+      'description' => t('Allow ip addresses management.'),
+    ),
+  );
+}
+
+/**
+ * Admin page.
+ */
+function artesis_ipaccess_admin_page() {
+
+  $page = array();
+
+  $rows = array();
+  $header = array(
+    'ip' => array(
+      'data' => t('IP address'),
+      'type' => 'field',
+      'field' => 'i.ipid',
+      'sort' => 'desc',
+    ),
+    'status' => array(
+      'data' => t('Status'),
+      'field' => 'i.status',
+      'sort' => 'asc',
+    ),
+    'ops' => array('data' => t('Operations')),
+  );
+
+  $query = db_select('ip_access', 'i')->extend('TableSort');
+  $result = $query->fields('i', array('ipid', 'ip', 'status'))
+    ->orderByHeader($header)
+    ->execute();
+
+  foreach ($result as $ip) {
+    $rows[] = array(
+      $ip->ip,
+      $ip->status == 1 ? t('Allowed') : t('Resticted'),
+      l(t('delete'), "admin/config/people/ip/delete/{$ip->ipid}"),
+    );
+  }
+
+  $page['artesis_ipaccess_add_ip_form'] = drupal_get_form('artesis_ipaccess_add_ip_form');
+
+  $page['artesis_ipaccess_ips_table'] = array(
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => $rows,
+    '#empty' => t('No IP addresses available.'),
+  );
+
+  return $page;
+}
+
+/**
+ * Define the form for add IP addresses.
+ */
+function artesis_ipaccess_add_ip_form($form, $form_state) {
+  $options = array(
+    1 => t('Allowed'),
+    0 => t('Restricted'),
+  );
+
+  $form['ipaccess'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Add IP address'),
+  );
+
+  $form['ipaccess']['ip'] = array(
+    '#title' => t('IP address'),
+    '#type' => 'textfield',
+    '#size' => 48,
+    '#maxlength' => 40,
+    '#default_value' => '',
+    '#description' => t('Enter a valid IP address.'),
+    '#attributes' => array('class' => array('container-inline')),
+  );
+
+  $form['ipaccess']['status'] = array(
+    '#title' => t('Status'),
+    '#type' => 'select',
+    '#options' => $options,
+    '#description' => t('Select iwhich status will have this IP.'),
+  );
+
+  $form['ipaccess']['actions'] = array('#type' => 'actions');
+
+  $form['ipaccess']['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Add'),
+  );
+
+  $form['#submit'][] = 'artesis_ipaccess_add_ip_form_submit';
+
+  $form['#validate'][] = 'artesis_ipaccess_add_ip_form_validate';
+
+  return $form;
+}
+
+/**
+ * Form validation callback.
+ */
+function artesis_ipaccess_add_ip_form_validate($form, &$form_state) {
+  $ip = trim($form_state['values']['ip']);
+  if (db_query("SELECT * FROM {ip_access} WHERE ip = :ip", array(':ip' => $ip))->fetchField()) {
+    form_set_error('ip', t('This IP address is already in list.'));
+  }
+  elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE) == FALSE) {
+    form_set_error('ip', t('Enter a valid IP address.'));
+  }
+}
+
+/**
+ * Form submit callback.
+ */
+function artesis_ipaccess_add_ip_form_submit($form, &$form_state) {
+  $ip = trim($form_state['values']['ip']);
+  $status = $form_state['values']['status'];
+  db_insert('ip_access')
+    ->fields(array('ip' => $ip, 'status' => $status))
+    ->execute();
+  $status = $status == 1 ? t('Allowed') : t('Restricted');
+  drupal_set_message(t('The IP address %ip has been added to @status list.', array(
+    '%ip' => $ip,
+    '@status' => $status,
+  )));
+  $form_state['redirect'] = 'admin/config/people/ip';
+  return;
+}
+
+/**
+ * Process delete action.
+ */
+function artesis_ipaccess_ip_delete($ipid) {
+  db_delete('ip_access')
+    ->condition('ipid', $ipid)
+    ->execute();
+  drupal_set_message(t('The IP address was deleted.'));
+  drupal_goto('admin/config/people/ip');
+}
